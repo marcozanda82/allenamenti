@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trainer Trazioni</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 600px; background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px D15px rgba(0,0,0,0.1); text-align: center; }
+        h1, h2 { color: #0d47a1; }
+        h1 { border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        p { font-size: 1.1em; line-height: 1.6; }
+        button { background-color: #1976d2; color: white; padding: 15px 25px; border: none; border-radius: 8px; cursor: pointer; font-size: 1.2em; font-weight: 600; transition: background-color 0.3s; margin-top: 10px; }
+        button:hover { background-color: #1565c0; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #setup-screen select { font-size: 1.2em; padding: 10px; width: 100%; margin-bottom: 20px; }
+        #workout-screen { display: none; }
+        #exercise-name { font-size: 2em; color: #d84315; margin: 10px 0; }
+        #exercise-details { font-size: 1.5em; font-weight: bold; }
+        #timer-display { font-size: 3em; color: #2e7d32; font-weight: bold; margin: 20px 0; }
+        #link-indietro { display: inline-block; margin-top: 20px; color: #607d8b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="setup-screen">
+            <h1>Trainer Trazioni</h1>
+            <p>Seleziona la fase del programma che vuoi iniziare. Ricorda di fare prima un buon riscaldamento!</p>
+            <label for="phase-select" style="font-weight:bold;">Scegli la tua fase:</label>
+            <select id="phase-select">
+                <option value="fase0">Fase 0: Partenza da 3 Chin-up</option>
+                <option value="fase1">Fase 1: Fondamenta (Partenza da Zero)</option>
+                <option value="fase2">Fase 2: Forza Eccentrica</option>
+                <option value="fase3">Fase 3: Primo Pull-up</option>
+            </select>
+            <button id="start-workout-btn">Inizia Allenamento</button>
+        </div>
+
+        <div id="workout-screen">
+            <h2 id="exercise-name">Nome Esercizio</h2>
+            <p>Serie <span id="current-set">1</span> di <span id="total-sets">4</span></p>
+            <p id="exercise-details">Fai 8-12 ripetizioni</p>
+            <h3 id="timer-display"></h3>
+            <button id="action-btn">Serie Completata / Inizia Riposo</button>
+            <button id="finish-workout-btn" style="background-color:#c62828; display:none;">Termina Allenamento</button>
+        </div>
+        <a href="index.html" id="link-indietro">Torna al Tracker Principale</a>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // === DATI DEGLI ALLENAMENTI ===
+    const workouts = {
+        fase0: [
+            { name: "Chin-up (Set Massimale)", type: "reps", sets: 1, target: "MAX (le tue 3+ reps)", rest: 120 },
+            { name: "Chin-up (Serie di Accumulo)", type: "reps", sets: 4, target: "1-2 reps", rest: 75 },
+            { name: "Negative a Presa Prona (Pull-up)", type: "reps", sets: 2, target: "2-3 reps (lente)", rest: 90 }
+        ],
+        fase1: [
+            { name: "Appendimento Passivo (Dead Hang)", type: "time", sets: 4, target: "MAX tempo", rest: 90 },
+            { name: "Trazioni Scapolari", type: "reps", sets: 3, target: "5-8 reps", rest: 60 },
+            { name: "Trazioni Orizzontali (sotto un tavolo)", type: "reps", sets: 4, target: "MAX reps", rest: 90 }
+        ],
+        fase2: [
+            { name: "Negative a Presa Inversa (Chin-up)", type: "reps", sets: 4, target: "3-5 reps (lente, 5 sec)", rest: 90 },
+            { name: "Trazioni Orizzontali", type: "reps", sets: 4, target: "MAX reps", rest: 75 }
+        ],
+        fase3: [
+            { name: "Tentativo Chin-up / Pull-up", type: "reps", sets: 3, target: "1-2 reps", rest: 120 },
+            { name: "Negative a Presa Prona", type: "reps", sets: 3, target: "3-5 reps (lente)", rest: 90 }
+        ]
+    };
+
+    // === RIFERIMENTI DOM ===
+    const setupScreen = document.getElementById('setup-screen');
+    const workoutScreen = document.getElementById('workout-screen');
+    const phaseSelect = document.getElementById('phase-select');
+    const startBtn = document.getElementById('start-workout-btn');
+    const exerciseNameEl = document.getElementById('exercise-name');
+    const currentSetEl = document.getElementById('current-set');
+    const totalSetsEl = document.getElementById('total-sets');
+    const exerciseDetailsEl = document.getElementById('exercise-details');
+    const timerDisplayEl = document.getElementById('timer-display');
+    const actionBtn = document.getElementById('action-btn');
+    const finishBtn = document.getElementById('finish-workout-btn');
+
+    // === STATO DELL'APP ===
+    let currentWorkout, currentExerciseIndex, currentSet, timerInterval, isResting = false;
+
+    function displayCurrentExercise() {
+        const exercise = currentWorkout[currentExerciseIndex];
+        exerciseNameEl.textContent = exercise.name;
+        currentSetEl.textContent = currentSet;
+        totalSetsEl.textContent = exercise.sets;
+        exerciseDetailsEl.textContent = `Fai ${exercise.target}`;
+    }
+
+    function startWorkout() {
+        const selectedPhase = phaseSelect.value;
+        currentWorkout = workouts[selectedPhase];
+        if (!currentWorkout) return;
+
+        currentExerciseIndex = 0;
+        currentSet = 1;
+        isResting = false;
+
+        setupScreen.style.display = 'none';
+        workoutScreen.style.display = 'block';
+        finishBtn.style.display = 'inline-block';
+        actionBtn.style.display = 'inline-block';
+        actionBtn.disabled = false;
+        timerDisplayEl.textContent = '';
+        
+        displayCurrentExercise();
+    }
+
+    function startTimer(duration) {
+        isResting = true;
+        let timeLeft = duration;
+        timerDisplayEl.textContent = `Riposo: ${timeLeft}s`;
+        actionBtn.textContent = 'Salta Riposo';
+
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            timerDisplayEl.textContent = `Riposo: ${timeLeft}s`;
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                moveToNextStep();
+            }
+        }, 1000);
+    }
+
+    function moveToNextStep() {
+        isResting = false;
+        timerDisplayEl.textContent = '';
+        actionBtn.textContent = 'Serie Completata / Inizia Riposo';
+
+        const exercise = currentWorkout[currentExerciseIndex];
+        if (currentSet < exercise.sets) {
+            currentSet++;
+        } else {
+            currentExerciseIndex++;
+            currentSet = 1;
+        }
+
+        if (currentExerciseIndex >= currentWorkout.length) {
+            finishWorkout();
+        } else {
+            displayCurrentExercise();
+        }
+    }
+
+    function finishWorkout() {
+        clearInterval(timerInterval);
+        exerciseNameEl.textContent = "Allenamento Completato!";
+        exerciseDetailsEl.innerHTML = "Ottimo lavoro. Ricorda di fare defaticamento e stretching.";
+        currentSetEl.textContent = '-';
+        totalSetsEl.textContent = '-';
+        timerDisplayEl.textContent = '💪';
+        actionBtn.style.display = 'none';
+        finishBtn.textContent = 'Inizia un Altro Allenamento';
+    }
+
+    // === EVENT LISTENERS ===
+    startBtn.addEventListener('click', startWorkout);
+
+    actionBtn.addEventListener('click', () => {
+        if (isResting) {
+            clearInterval(timerInterval);
+            moveToNextStep();
+        } else {
+            const exercise = currentWorkout[currentExerciseIndex];
+            startTimer(exercise.rest);
+        }
+    });
+
+    finishBtn.addEventListener('click', () => {
+        workoutScreen.style.display = 'none';
+        setupScreen.style.display = 'block';
+    });
+});
+</script>
+</body>
+</html>
