@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trainer Trazioni</title>
+    <title>Trainer Trazioni con Calorie</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 600px; background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px D15px rgba(0,0,0,0.1); text-align: center; }
+        .container { width: 100%; max-width: 600px; background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
         h1, h2 { color: #0d47a1; }
         h1 { border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
         p { font-size: 1.1em; line-height: 1.6; }
@@ -18,6 +18,8 @@
         #exercise-name { font-size: 2em; color: #d84315; margin: 10px 0; }
         #exercise-details { font-size: 1.5em; font-weight: bold; }
         #timer-display { font-size: 3em; color: #2e7d32; font-weight: bold; margin: 20px 0; }
+        #final-message { font-size: 1.2em; }
+        #calories-display { font-size: 1.8em; color: #0d47a1; font-weight: bold; margin-top: 15px; }
         #link-indietro { display: inline-block; margin-top: 20px; color: #607d8b; }
     </style>
 </head>
@@ -41,6 +43,8 @@
             <p>Serie <span id="current-set">1</span> di <span id="total-sets">4</span></p>
             <p id="exercise-details">Fai 8-12 ripetizioni</p>
             <h3 id="timer-display"></h3>
+            <div id="final-message"></div>
+            <p id="calories-display"></p>
             <button id="action-btn">Serie Completata / Inizia Riposo</button>
             <button id="finish-workout-btn" style="background-color:#c62828; display:none;">Termina Allenamento</button>
         </div>
@@ -49,25 +53,31 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // === DATI DEGLI ALLENAMENTI ===
+    // === COSTANTI UTENTE E FISICHE ===
+    const USER_WEIGHT_KG = 74;
+    // Stima secondi per ripetizione per il calcolo delle calorie
+    const TIME_PER_REP_NORMAL = 3; // Secondi per una rep normale
+    const TIME_PER_REP_LENTA = 5;  // Secondi per una rep negativa/lenta
+
+    // === DATI DEGLI ALLENAMENTI CON VALORI MET ===
     const workouts = {
         fase0: [
-            { name: "Chin-up (Set Massimale)", type: "reps", sets: 1, target: "MAX (le tue 3+ reps)", rest: 120 },
-            { name: "Chin-up (Serie di Accumulo)", type: "reps", sets: 4, target: "1-2 reps", rest: 75 },
-            { name: "Negative a Presa Prona (Pull-up)", type: "reps", sets: 2, target: "2-3 reps (lente)", rest: 90 }
+            { name: "Chin-up (Set Massimale)", type: "reps", sets: 1, target: "MAX (le tue 3+ reps)", rest: 120, met: 8.0, timePerRep: TIME_PER_REP_NORMAL },
+            { name: "Chin-up (Serie di Accumulo)", type: "reps", sets: 4, target: "1-2 reps", rest: 75, met: 8.0, timePerRep: TIME_PER_REP_NORMAL },
+            { name: "Negative a Presa Prona (Pull-up)", type: "reps", sets: 2, target: "2-3 reps (lente)", rest: 90, met: 8.0, timePerRep: TIME_PER_REP_LENTA }
         ],
         fase1: [
-            { name: "Appendimento Passivo (Dead Hang)", type: "time", sets: 4, target: "MAX tempo", rest: 90 },
-            { name: "Trazioni Scapolari", type: "reps", sets: 3, target: "5-8 reps", rest: 60 },
-            { name: "Trazioni Orizzontali (sotto un tavolo)", type: "reps", sets: 4, target: "MAX reps", rest: 90 }
+            { name: "Appendimento Passivo (Dead Hang)", type: "time", sets: 4, target: "MAX tempo", rest: 90, met: 3.5 },
+            { name: "Trazioni Scapolari", type: "reps", sets: 3, target: "5-8 reps", rest: 60, met: 2.5, timePerRep: TIME_PER_REP_NORMAL },
+            { name: "Trazioni Orizzontali (sotto un tavolo)", type: "reps", sets: 4, target: "MAX reps", rest: 90, met: 5.0, timePerRep: TIME_PER_REP_NORMAL }
         ],
         fase2: [
-            { name: "Negative a Presa Inversa (Chin-up)", type: "reps", sets: 4, target: "3-5 reps (lente, 5 sec)", rest: 90 },
-            { name: "Trazioni Orizzontali", type: "reps", sets: 4, target: "MAX reps", rest: 75 }
+            { name: "Negative a Presa Inversa (Chin-up)", type: "reps", sets: 4, target: "3-5 reps (lente, 5 sec)", rest: 90, met: 8.0, timePerRep: TIME_PER_REP_LENTA },
+            { name: "Trazioni Orizzontali", type: "reps", sets: 4, target: "MAX reps", rest: 75, met: 5.0, timePerRep: TIME_PER_REP_NORMAL }
         ],
         fase3: [
-            { name: "Tentativo Chin-up / Pull-up", type: "reps", sets: 3, target: "1-2 reps", rest: 120 },
-            { name: "Negative a Presa Prona", type: "reps", sets: 3, target: "3-5 reps (lente)", rest: 90 }
+            { name: "Tentativo Chin-up / Pull-up", type: "reps", sets: 3, target: "1-2 reps", rest: 120, met: 8.0, timePerRep: TIME_PER_REP_NORMAL },
+            { name: "Negative a Presa Prona", type: "reps", sets: 3, target: "3-5 reps (lente)", rest: 90, met: 8.0, timePerRep: TIME_PER_REP_LENTA }
         ]
     };
 
@@ -83,9 +93,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const timerDisplayEl = document.getElementById('timer-display');
     const actionBtn = document.getElementById('action-btn');
     const finishBtn = document.getElementById('finish-workout-btn');
+    const finalMessageEl = document.getElementById('final-message');
+    const caloriesDisplayEl = document.getElementById('calories-display');
 
     // === STATO DELL'APP ===
-    let currentWorkout, currentExerciseIndex, currentSet, timerInterval, isResting = false;
+    let currentWorkout, currentExerciseIndex, currentSet, timerInterval;
+    let isResting = false;
+    let totalCalories = 0;
+
+    // === FUNZIONI ===
+    function calculateCalories(met, durationMinutes) {
+        if (!met || !durationMinutes || durationMinutes <= 0) return 0;
+        const caloriesPerMinute = (met * 3.5 * USER_WEIGHT_KG) / 200;
+        return caloriesPerMinute * durationMinutes;
+    }
+    
+    function processSetCompletion() {
+        const exercise = currentWorkout[currentExerciseIndex];
+        let performance = 0;
+        let promptMessage = "";
+
+        if (exercise.type === 'reps') {
+            promptMessage = `Quante ripetizioni hai completato per "${exercise.name}" (Set ${currentSet})?`;
+        } else { // type === 'time'
+            promptMessage = `Quanti secondi hai resistito per "${exercise.name}" (Set ${currentSet})?`;
+        }
+
+        const userInput = prompt(promptMessage);
+        performance = parseInt(userInput, 10);
+
+        if (!isNaN(performance) && performance > 0) {
+            let durationMinutes = 0;
+            if (exercise.type === 'reps') {
+                durationMinutes = (performance * exercise.timePerRep) / 60;
+            } else { // type === 'time'
+                durationMinutes = performance / 60;
+            }
+            const caloriesThisSet = calculateCalories(exercise.met, durationMinutes);
+            totalCalories += caloriesThisSet;
+            startTimer(exercise.rest);
+        } else {
+             alert("Inserimento non valido. La serie non verrà conteggiata per le calorie. Riprova.");
+        }
+    }
+
 
     function displayCurrentExercise() {
         const exercise = currentWorkout[currentExerciseIndex];
@@ -93,6 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSetEl.textContent = currentSet;
         totalSetsEl.textContent = exercise.sets;
         exerciseDetailsEl.textContent = `Fai ${exercise.target}`;
+        finalMessageEl.textContent = '';
+        caloriesDisplayEl.textContent = '';
     }
 
     function startWorkout() {
@@ -103,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentExerciseIndex = 0;
         currentSet = 1;
         isResting = false;
+        totalCalories = 0;
 
         setupScreen.style.display = 'none';
         workoutScreen.style.display = 'block';
@@ -110,6 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
         actionBtn.style.display = 'inline-block';
         actionBtn.disabled = false;
         timerDisplayEl.textContent = '';
+        caloriesDisplayEl.textContent = '';
+        finalMessageEl.textContent = '';
         
         displayCurrentExercise();
     }
@@ -119,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let timeLeft = duration;
         timerDisplayEl.textContent = `Riposo: ${timeLeft}s`;
         actionBtn.textContent = 'Salta Riposo';
+        actionBtn.style.backgroundColor = '#ff9800'; // Orange color for skipping
 
         timerInterval = setInterval(() => {
             timeLeft--;
@@ -131,9 +188,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function moveToNextStep() {
+        clearInterval(timerInterval);
         isResting = false;
         timerDisplayEl.textContent = '';
-        actionBtn.textContent = 'Serie Completata / Inizia Riposo';
+        actionBtn.textContent = 'Serie Completata';
+        actionBtn.style.backgroundColor = '#1976d2'; // Back to blue
 
         const exercise = currentWorkout[currentExerciseIndex];
         if (currentSet < exercise.sets) {
@@ -153,7 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function finishWorkout() {
         clearInterval(timerInterval);
         exerciseNameEl.textContent = "Allenamento Completato!";
-        exerciseDetailsEl.innerHTML = "Ottimo lavoro. Ricorda di fare defaticamento e stretching.";
+        exerciseDetailsEl.innerHTML = "";
+        finalMessageEl.innerHTML = "Ottimo lavoro. Ricorda di fare defaticamento e stretching.";
+        caloriesDisplayEl.textContent = `Stima calorie bruciate: ${Math.round(totalCalories)} kcal`;
         currentSetEl.textContent = '-';
         totalSetsEl.textContent = '-';
         timerDisplayEl.textContent = '💪';
@@ -169,14 +230,16 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(timerInterval);
             moveToNextStep();
         } else {
-            const exercise = currentWorkout[currentExerciseIndex];
-            startTimer(exercise.rest);
+            processSetCompletion();
         }
     });
 
     finishBtn.addEventListener('click', () => {
+        // Reset to initial state
         workoutScreen.style.display = 'none';
         setupScreen.style.display = 'block';
+        actionBtn.textContent = 'Serie Completata';
+        actionBtn.style.backgroundColor = '#1976d2';
     });
 });
 </script>
