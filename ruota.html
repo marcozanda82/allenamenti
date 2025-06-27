@@ -64,7 +64,6 @@
                 const planContainer = document.getElementById('workout-plan-container');
                 const logFormContainer = document.getElementById('log-form');
                 const historyBody = document.getElementById('history-body');
-                // Aggiungere qui i bottoni di backup/ripristino
                 const exportBtn = document.getElementById('export-data');
                 const importBtn = document.getElementById('import-data');
                 const importArea = document.getElementById('import-area');
@@ -72,31 +71,21 @@
 
 
                 // --- FUNZIONI DI CALCOLO DATA ---
-                const getWeekNumber = (d) => {
-                    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-                    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-                    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-                };
-
                 const isWorkoutDay = (day) => {
-                    const dayOfWeek = day.getDay(); // 0=Dom, 1=Lun, 3=Mer, 5=Ven
-                    const weekNum = getWeekNumber(day);
-                    
+                    const dayOfWeek = day.getDay(); // 0=Dom, 3=Mer, 5=Ven
                     const isWednesday = (dayOfWeek === 3);
-                    const isAlternatingFriday = (dayOfWeek === 5 && weekNum % 2 === 0); // Venerdì delle settimane pari
-
-                    return isWednesday || isAlternatingFriday;
+                    const isFriday = (dayOfWeek === 5);
+                    return isWednesday || isFriday;
                 };
 
                 const findNextWorkoutDate = (startDate) => {
                     let nextDate = new Date(startDate);
-                    nextDate.setDate(startDate.getDate() + 1); // Inizia a controllare da domani
+                    nextDate.setDate(startDate.getDate() + 1);
                     while (true) {
                         if (isWorkoutDay(nextDate)) {
-                            return nextDate; // Trovato!
+                            return nextDate;
                         }
-                        nextDate.setDate(nextDate.getDate() + 1); // Passa al giorno successivo
+                        nextDate.setDate(nextDate.getDate() + 1);
                     }
                 };
                 
@@ -107,7 +96,6 @@
                     const lastEntry = history.length > 0 ? history[history.length - 1] : null;
                     let workoutToday = isWorkoutDay(today);
 
-                    // Controlla se l'allenamento di oggi è già stato fatto
                     if (lastEntry && lastEntry.date === today.toLocaleDateString('it-IT')) {
                         workoutToday = false; 
                     }
@@ -148,7 +136,7 @@
                         reps: document.getElementById('reps').value
                     });
                     localStorage.setItem('abWheelHistory', JSON.stringify(history));
-                    logFormContainer.removeEventListener('submit', handleFormSubmit); // Rimuove per evitare duplicati
+                    logFormContainer.removeEventListener('submit', handleFormSubmit);
                     updatePage();
                 };
 
@@ -175,8 +163,49 @@
                 };
 
                 // --- GESTIONE BACKUP --- (logica invariata)
-                exportBtn.addEventListener('click', () => { /* ... codice export ... */ });
-                importBtn.addEventListener('click', () => { /* ... codice import ... */ });
+                exportBtn.addEventListener('click', () => { 
+                    const history = JSON.parse(localStorage.getItem('abWheelHistory')) || [];
+                    const level = localStorage.getItem('abWheelLevel') || 'principiante';
+                    if (history.length === 0) {
+                        alert('Non ci sono dati da esportare!');
+                        return;
+                    }
+                    const backupData = { level, history };
+                    const jsonString = JSON.stringify(backupData, null, 2);
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const date = new Date().toISOString().slice(0, 10);
+                    a.download = `backup_ab_wheel_${date}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    alert('File di backup scaricato con successo!');
+                 });
+                importBtn.addEventListener('click', () => { 
+                    const text = importArea.value;
+                    if (!text) {
+                        alert('Incolla i dati del backup nell\'area di testo prima di caricare.');
+                        return;
+                    }
+                    try {
+                        const importedData = JSON.parse(text);
+                        if (!importedData.level || !Array.isArray(importedData.history)) {
+                            throw new Error('Formato dati non valido.');
+                        }
+                        
+                        if (confirm('Stai per sovrascrivere i dati attuali con quelli del backup. Sei sicuro?')) {
+                            localStorage.setItem('abWheelLevel', importedData.level);
+                            localStorage.setItem('abWheelHistory', JSON.stringify(importedData.history));
+                            alert('Dati ripristinati con successo! La pagina verrà ricaricata.');
+                            location.reload();
+                        }
+                    } catch (error) {
+                        alert('Errore: I dati inseriti non sono validi o sono corrotti.');
+                    }
+                 });
                 clearHistoryBtn.addEventListener('click', () => {
                      if (confirm('Sei sicuro di voler cancellare tutto lo storico?')) {
                         localStorage.removeItem('abWheelHistory');
